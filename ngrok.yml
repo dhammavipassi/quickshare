@@ -1,4 +1,7 @@
 # ngrok 配置文件 for QuickShare 项目
-# 请将 YOUR_NEW_AUTHTOKEN_HERE 替换为您为该项目准备的新 ngrok 账户的 Authtoken。
 authtoken: 31MayKPYAyVkbMIsD3S08drgtbu_7Q62u4ALQvs4oXEiWf8iH
 version: "2"
+tunnels:
+  quickshare-tunnel:
+    proto: http
+    addr: 3003

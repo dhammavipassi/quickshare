@@ -52,14 +52,12 @@ function chooseSessionDir() {
   const tmpBase = '/tmp';
   try {
     fs.accessSync(tmpBase, fs.constants.W_OK);
-    // 生产或函数环境优先使用 /tmp
-    if (process.env.NODE_ENV === 'production') {
-      return path.join(tmpBase, 'sessions');
-    }
+    // 只要 /tmp 可写，就优先使用（覆盖函数/容器环境差异）
+    return path.join(tmpBase, 'sessions');
   } catch (_) {
     // /tmp 不可写则回退到本地目录
+    return path.join(__dirname, 'sessions');
   }
-  return path.join(__dirname, 'sessions');
 }
 
 const sessionDir = chooseSessionDir();

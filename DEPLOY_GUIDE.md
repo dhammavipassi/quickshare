@@ -233,12 +233,38 @@ docker-compose up -d --build
    docker-compose up -d
    ```
 
-**2. 启动 ngrok**
+**2. 在后台启动 ngrok (使用 nohup)**
+
+为了确保关闭终端后 `ngrok` 服务能继续运行，我们使用 `nohup` 命令。
+
    ```bash
-   # 在项目目录中执行
-   ngrok http 3003 --config ngrok.yml
+   # 进入项目目录
+   cd /Users/dhammavipassi/Github_projects/quickshare
+   
+   # 确保没有旧的 ngrok 进程在运行
+   pkill ngrok
+   
+   # 使用 nohup 在后台启动 ngrok
+   nohup ngrok start --config ngrok.yml --log=stdout quickshare-tunnel > ngrok.log 2>&1 &
    ```
-   终端中显示的 `Forwarding` 地址即为您的公共分享链接。
+
+**3. 获取公共链接**
+
+由于服务在后台运行，您需要通过查看日志文件 `ngrok.log` 来获取公共链接。
+
+   ```bash
+   # 查看日志并找到链接
+   cat /Users/dhammavipassi/Github_projects/quickshare/ngrok.log
+   ```
+   在日志中，找到类似 `url=https://xxxx.ngrok-free.app` 的信息，这就是您的公共分享链接。
+
+**4. 如何停止后台 ngrok 服务**
+
+当您不再需要分享时，可以运行以下命令来终止后台的 `ngrok` 进程。
+
+   ```bash
+   pkill ngrok
+   ```
 
 **1. 安装 ngrok:**
 在 macOS 上，最简单的方式是使用 Homebrew 安装。
