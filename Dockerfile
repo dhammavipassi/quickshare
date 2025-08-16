@@ -18,11 +18,12 @@ RUN mkdir -p /usr/src/app/data && \
     chmod -R 777 /usr/src/app/data
 
 # 暴露端口
-EXPOSE 8888
+# 端口将由 docker-compose.yml 动态管理
+# EXPOSE 8888
 
 # 设置环境变量
-ENV NODE_ENV=production \
-    PORT=8888
+# 环境变量将由 docker-compose.yml 通过 env_file 动态注入
+ENV NODE_ENV=production
 
 # 启动应用
 CMD ["node", "app.js"]

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   html-go-express:
     build:
@@ -8,12 +6,11 @@ services:
     container_name: html-go-express
     restart: unless-stopped
     ports:
-      - "8888:8888"
+      - "3003:3003"
     volumes:
       - html-go-data:/usr/src/app/data
-    environment:
-      - NODE_ENV=production
-      - PORT=8888
+    env_file:
+      - .env.production
     networks:
       - html-go-network
 

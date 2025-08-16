@@ -23,7 +23,7 @@ const config = {
 
   // 生产环境配置
   production: {
-    port: process.env.PORT || 8888,
+    port: parseInt(process.env.PORT, 10) || 8888,
     logLevel: 'combined',
     authEnabled: process.env.AUTH_ENABLED === 'true',
     authPassword: process.env.AUTH_PASSWORD || 'admin123'
