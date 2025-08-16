@@ -2,16 +2,36 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-// 数据库文件路径
-// Vercel 环境下，只有 /tmp 目录是可写的
-const dbPath = process.env.VERCEL ? '/tmp/html-go.db' : path.join(__dirname, '../db/html-go.db');
+// 选择可写的数据目录（优先 /tmp，用于 Vercel/Serverless）
+function chooseDbPath() {
+  const tmpPath = '/tmp';
+  let canUseTmp = false;
+  try {
+    fs.accessSync(tmpPath, fs.constants.W_OK);
+    canUseTmp = true;
+  } catch (e) {
+    canUseTmp = false;
+  }
 
-// 在 Serverless 环境下，我们假定 /tmp 目录永远存在且可写
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  // 在生产且 /tmp 可写时，使用 /tmp（Vercel 函数环境）
+  if (process.env.NODE_ENV === 'production' && canUseTmp) {
+    return path.join(tmpPath, 'html-go.db');
+  }
+
+  // 本地/其他环境：使用项目内 db 目录
+  return path.join(__dirname, '../db/html-go.db');
+}
+
+const dbPath = chooseDbPath();
+
+// 确保数据库目录存在（若在只读目录失败则忽略，但优先避免选择只读路径）
+try {
   const dbDir = path.dirname(dbPath);
   if (!fs.existsSync(dbDir)) {
     fs.mkdirSync(dbDir, { recursive: true });
   }
+} catch (e) {
+  console.warn('[DB] 无法创建数据库目录:', e.message);
 }
 
 // 创建数据库连接

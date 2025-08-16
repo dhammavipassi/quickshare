@@ -47,13 +47,30 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '15mb' })); // 增加限�
 app.use(cookieParser()); // 解析 Cookie
 app.use(express.static(path.join(__dirname, 'public'))); // 静态文件
 
-// Vercel 环境下，只有 /tmp 目录是可写的
-const sessionDir = process.env.VERCEL ? '/tmp/sessions' : path.join(__dirname, 'sessions');
-// 在 Serverless 环境下，我们假定 /tmp 目录永远存在且可写
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+// 选择会话目录（优先 /tmp，用于 Serverless 环境）
+function chooseSessionDir() {
+  const tmpBase = '/tmp';
+  try {
+    fs.accessSync(tmpBase, fs.constants.W_OK);
+    // 生产或函数环境优先使用 /tmp
+    if (process.env.NODE_ENV === 'production') {
+      return path.join(tmpBase, 'sessions');
+    }
+  } catch (_) {
+    // /tmp 不可写则回退到本地目录
+  }
+  return path.join(__dirname, 'sessions');
+}
+
+const sessionDir = chooseSessionDir();
+
+// 确保会话目录存在（若失败仅告警）
+try {
   if (!fs.existsSync(sessionDir)) {
     fs.mkdirSync(sessionDir, { recursive: true });
   }
+} catch (e) {
+  console.warn('[Session] 无法创建会话目录:', sessionDir, e.message);
 }
 
 // 使用文件存储会话
