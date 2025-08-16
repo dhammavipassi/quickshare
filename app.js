@@ -49,8 +49,11 @@ app.use(express.static(path.join(__dirname, 'public'))); // 静态文件
 
 // Vercel 环境下，只有 /tmp 目录是可写的
 const sessionDir = process.env.VERCEL ? '/tmp/sessions' : path.join(__dirname, 'sessions');
-if (!fs.existsSync(sessionDir)) {
-  fs.mkdirSync(sessionDir, { recursive: true });
+// 在 Serverless 环境下，我们假定 /tmp 目录永远存在且可写
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  if (!fs.existsSync(sessionDir)) {
+    fs.mkdirSync(sessionDir, { recursive: true });
+  }
 }
 
 // 使用文件存储会话

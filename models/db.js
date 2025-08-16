@@ -6,10 +6,12 @@ const fs = require('fs');
 // Vercel 环境下，只有 /tmp 目录是可写的
 const dbPath = process.env.VERCEL ? '/tmp/html-go.db' : path.join(__dirname, '../db/html-go.db');
 
-// 确保数据库目录存在
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+// 在 Serverless 环境下，我们假定 /tmp 目录永远存在且可写
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) {
+    fs.mkdirSync(dbDir, { recursive: true });
+  }
 }
 
 // 创建数据库连接
