@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs');
 
 // 数据库文件路径
-const dbPath = path.join(__dirname, '../db/html-go.db');
+// Vercel 环境下，只有 /tmp 目录是可写的
+const dbPath = process.env.VERCEL ? '/tmp/html-go.db' : path.join(__dirname, '../db/html-go.db');
 
 // 确保数据库目录存在
 const dbDir = path.dirname(dbPath);

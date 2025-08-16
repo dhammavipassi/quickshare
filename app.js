@@ -7,9 +7,9 @@ const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-const cookieSession = require('cookie-session');
-// const session = require('express-session');
-// const FileStore = require('session-file-store')(session);
+// const cookieSession = require('cookie-session');
+const session = require('express-session');
+const FileStore = require('session-file-store')(session);
 const fs = require('fs');
 const { initDatabase } = require('./models/db');
 
@@ -47,14 +47,33 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '15mb' })); // 增加限�
 app.use(cookieParser()); // 解析 Cookie
 app.use(express.static(path.join(__dirname, 'public'))); // 静态文件
 
-// Vercel 环境下，文件系统是只读的，因此我们使用 cookie-session
-app.use(cookieSession({
-  name: 'session',
-  keys: ['html-go-secret-key'], // 用于加密的密钥，可以设置多个
-  maxAge: 24 * 60 * 60 * 1000, // 24小时
-  httpOnly: true,
-  secure: process.env.NODE_ENV === 'production', // 在生产环境（HTTPS）下启用 secure
-  sameSite: 'lax'
+// Vercel 环境下，只有 /tmp 目录是可写的
+const sessionDir = process.env.VERCEL ? '/tmp/sessions' : path.join(__dirname, 'sessions');
+if (!fs.existsSync(sessionDir)) {
+  fs.mkdirSync(sessionDir, { recursive: true });
+}
+
+// 使用文件存储会话
+app.use(session({
+  store: new FileStore({
+    path: sessionDir,
+    ttl: 86400, // 会话有效期（秒）
+    retries: 0, // 读取会话文件的重试次数
+    secret: 'html-go-secret-key', // 用于加密会话文件
+    logFn: function(message) {
+      console.log('[session-file-store]', message);
+    }
+  }),
+  secret: 'html-go-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    // 只在 HTTPS 环境下设置 secure为 true
+    secure: process.env.NODE_ENV === 'production', // 如果您使用 HTTPS，请设置为 true
+    maxAge: 24 * 60 * 60 * 1000, // 24小时
+    httpOnly: true,
+    sameSite: 'lax'
+  }
 }));
 
 // 设置视图引擎
