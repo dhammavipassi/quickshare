@@ -23,6 +23,11 @@ coverage/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env.ngrok
+
+# Cloudflare/证书等敏感文件（避免误提交）
+cert.pem
 
 # 数据库文件
 *.db
