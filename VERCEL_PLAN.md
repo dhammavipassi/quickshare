@@ -55,3 +55,29 @@
 ---
 
 本计划作为后期迭代项记录于仓库，当前不实施以保持稳定。需要时可开启对应任务落地上述改造。
+
+---
+
+## 附：上线与验证清单（已落地）
+
+- 代码：主干已支持 Postgres + cookie-session 自动切换；本地/Docker 行为不变。
+- Vercel 环境变量（Production/Preview 同步）：
+  - 必填：`DATABASE_URL`（Neon/Supabase/Vercel Postgres 连接串）
+  - 必填：`SESSION_SECRET`（随机强密钥）
+  - 可选：`AUTH_ENABLED=true`、`AUTH_PASSWORD=<自定>`、`SESSION_STRATEGY=cookie`
+- 部署：保存环境变量后 Redeploy。
+- 验证：
+  - 日志出现“数据库初始化成功（Postgres）”“[Session] 使用 cookie-session”。
+  - 创建一个分享链接，冷启动/再次部署后仍可访问。
+
+## 附：故障排查（Postgres + Cookie 会话）
+
+- 连接失败/握手错误：
+  - 确认连接串格式为 `postgresql://user:pass@host/db?sslmode=require`。
+  - 如供应商不支持 SSL，可临时设置 `PGSSL_DISABLE=1`（不建议长期关闭）。
+- 链接仍会丢：
+  - 检查是否遗漏了 Preview 环境变量（仅设置了 Production 时，预览部署仍为临时存储）。
+- 登录态异常：
+  - 确认已启用 cookie-session（设置了 `DATABASE_URL` 或 `VERCEL` 环境会自动切换）。
+- 回退方案：
+  - 删除 `DATABASE_URL` 即可回到 SQLite（Vercel 上为临时存储，仅用于演示）。

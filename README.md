@@ -298,6 +298,36 @@ ngrok（备选公网）：
    - 确保 `db` 目录存在且有写权限
    - 检查 `DB_PATH` 配置是否正确
 
+## 附：Vercel 快速开始（持久化模式）
+
+当部署到 Vercel 时，若仅使用临时文件系统（/tmp），实例回收后数据会丢失。已内置“云端 Postgres + Cookie 会话”的持久化方案，按下述步骤开启即可：
+
+- 前提：你需要一个 Postgres（Neon/Supabase 免费层或 Vercel Postgres）。
+- 方式 A（推荐）：Vercel → Project → Integrations → 添加 “Neon”，关联项目后自动注入连接串；如未自动写入，可在 Neon 控制台复制连接串。
+- 方式 B：直接在 Neon/Supabase 创建数据库，复制 `postgresql://user:pass@host/db?sslmode=require` 连接串。
+- 方式 C：Vercel → Storage → Add Postgres，创建后在环境变量新增 `DATABASE_URL`，值可用 `${POSTGRES_URL_NON_POOLING}`（或 `${POSTGRES_URL}`）。
+
+在 Vercel → Project → Settings → Environment Variables（Production/Preview 同步添加）填写：
+
+```
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
+SESSION_SECRET=<随机强密钥，例如 openssl rand -base64 32>
+# 可选认证门禁
+AUTH_ENABLED=true
+AUTH_PASSWORD=<你的登录密码>
+# 可选：手动指定会话策略（通常不需要，自动检测）
+# SESSION_STRATEGY=cookie
+```
+
+保存后 Redeploy。日志中应看到：
+- “数据库初始化成功（Postgres）”
+- “[Session] 使用 cookie-session”
+
+验证方式：创建一个分享链接，触发实例重启或再次部署后仍可访问，即表示已持久化。
+
+回滚：删除 `DATABASE_URL` 即回到 SQLite（在 Vercel 上为临时存储，不推荐）。本地与 Docker 不受影响，仍使用 SQLite + 文件会话。
+
+
 3. **会话存储错误**
    - 确保 `sessions` 目录存在且有读写权限
    - 检查磁盘空间是否充足

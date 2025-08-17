@@ -155,3 +155,33 @@ npm run ngrok:url
 - 4040 或 8787 端口被占用：修改 `docker-compose.yml` 对应端口映射或释放占用。
 - `npm run cf:url` 无输出：容器可能尚未就绪，等待数秒后重试；或使用 `docker logs quickshare-cloudflared --since 1h | grep trycloudflare`。
 - ngrok 仍出现提示页：属免费域名的产品策略，服务端无法绕过；付费预留域名或改用 Cloudflare。
+
+---
+
+## 附：Vercel 持久化分享（已支持）
+
+> 说明：上文 4) 提到的 “当前为临时存储” 是历史默认行为。现在代码已支持在 Vercel 上切换到“云端 Postgres + Cookie 会话”的持久化模式，部署无需改代码，只需配置环境变量并 Redeploy 即可。
+
+- 前置条件（任选其一）：
+  - Vercel + Neon 集成：Project → Integrations → 搜 “Neon” → 安装并关联项目（会自动注入连接串）。
+  - Neon/Supabase 手动创建：在控制台复制 `postgresql://user:pass@host/db?sslmode=require`。
+  - Vercel Postgres：Project → Storage → Add Postgres，完成后在环境变量新增 `DATABASE_URL=${POSTGRES_URL_NON_POOLING}`（或 `${POSTGRES_URL}`）。
+
+- 在 Vercel → Project → Settings → Environment Variables（建议 Production 与 Preview 同步添加）：
+  - 必填：`DATABASE_URL`（Postgres 连接串）
+  - 必填：`SESSION_SECRET`（随机强密钥，例如 `openssl rand -base64 32`）
+  - 可选：`AUTH_ENABLED=true`、`AUTH_PASSWORD=<你的密码>`
+  - 可选：`SESSION_STRATEGY=cookie`（通常无需，检测到 `DATABASE_URL`/`VERCEL` 会自动启用）
+
+- Redeploy 后验证：
+  - 部署日志包含 “数据库初始化成功（Postgres）”“[Session] 使用 cookie-session”。
+  - 创建一个分享链接，冷启动/再次部署后仍能访问，即为持久化生效。
+
+- 预览环境：若希望 Preview 分支同样持久化，请在 Preview 环境同样添加上述变量。
+
+- 回退：删除 `DATABASE_URL` 即回到 SQLite（在 Vercel 上为临时存储，仅用于演示）。
+
+更多细节与示例见：
+- README.md → “Vercel 快速开始（持久化模式）”
+- DEPLOY_GUIDE.md → “10. Vercel 托管（已支持免费持久化）”
+- VERCEL_PLAN.md → 上线与验证清单、故障排查

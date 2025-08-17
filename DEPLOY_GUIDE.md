@@ -489,3 +489,38 @@ docker compose exec html-go-express node scripts/migrate-db-to-volume.js \
   - `SESSION_SECRET`：随机强密钥
   - 可选：`SESSION_STRATEGY=cookie`（手动指定 Cookie 会话；检测到 `DATABASE_URL`/`VERCEL` 时会自动启用）
 - 详情见 `VERCEL_PLAN.md`。
+
+### 10.1 操作步骤（从零开始）
+1) 获取数据库连接串（任选其一）：
+   - Vercel + Neon 集成：Project → Integrations → 搜 “Neon” → 安装并关联项目（会自动写入环境变量）。
+   - Neon/Supabase 手动：在控制台创建项目，复制 `postgresql://user:pass@host/db?sslmode=require`。
+   - Vercel Postgres：Project → Storage → Add Postgres，完成后在环境变量新增 `DATABASE_URL=${POSTGRES_URL_NON_POOLING}`（或 `${POSTGRES_URL}`）。
+2) 在 Vercel → Project → Settings → Environment Variables：
+   - 在 Production（和 Preview，如需）新增：`DATABASE_URL`、`SESSION_SECRET`；可选 `AUTH_ENABLED`/`AUTH_PASSWORD`。
+3) Redeploy 当前项目。
+
+### 10.2 环境变量填写示例
+```
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
+SESSION_SECRET=openssl-rand-base64-32-output
+# 可选
+AUTH_ENABLED=true
+AUTH_PASSWORD=YourLoginPassword
+# 可选（通常不需要显式设置）
+# SESSION_STRATEGY=cookie
+```
+
+### 10.3 验证持久化是否生效
+- 部署日志包含：
+  - “数据库初始化成功（Postgres）”
+  - “[Session] 使用 cookie-session”
+- 创建一个分享链接，过一段时间重新部署或触发实例重启后仍能访问，即为持久化成功。
+
+### 10.4 常见问题（Vercel）
+- 无法连接数据库 / 超时：
+  - 确认 `DATABASE_URL` 正确且包含 `sslmode=require`（Neon/Supabase 通常要求）。
+  - 如提供方不支持 SSL，可临时设置 `PGSSL_DISABLE=1`（不建议长期关闭）。
+- 仍然丢数：
+  - 检查是否确实设置了 `DATABASE_URL` 并 Redeploy；未设置时会退回 SQLite（在 Vercel 上为临时存储）。
+- 预览环境未持久化：
+  - 需要在 Preview 环境同样添加 `DATABASE_URL` 与 `SESSION_SECRET`。
