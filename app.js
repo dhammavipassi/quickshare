@@ -7,9 +7,21 @@ const bodyParser = require('body-parser');
 const morgan = require('morgan');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
-// const cookieSession = require('cookie-session');
-const session = require('express-session');
-const FileStore = require('session-file-store')(session);
+// 会话：在 Vercel/云上用 cookie-session，本地/Docker 用文件会话
+let useCookieSession = false;
+if (process.env.SESSION_STRATEGY) {
+  useCookieSession = String(process.env.SESSION_STRATEGY).toLowerCase() === 'cookie';
+} else if (process.env.DATABASE_URL || process.env.VERCEL) {
+  useCookieSession = true;
+}
+
+let session, FileStore, cookieSession;
+if (useCookieSession) {
+  cookieSession = require('cookie-session');
+} else {
+  session = require('express-session');
+  FileStore = require('session-file-store')(session);
+}
 const fs = require('fs');
 const { initDatabase } = require('./models/db');
 
@@ -71,28 +83,41 @@ try {
   console.warn('[Session] 无法创建会话目录:', sessionDir, e.message);
 }
 
-// 使用文件存储会话
-app.use(session({
-  store: new FileStore({
-    path: sessionDir,
-    ttl: 86400, // 会话有效期（秒）
-    retries: 0, // 读取会话文件的重试次数
-    secret: 'html-go-secret-key', // 用于加密会话文件
-    logFn: function(message) {
-      console.log('[session-file-store]', message);
-    }
-  }),
-  secret: 'html-go-secret-key',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    // 只在 HTTPS 环境下设置 secure为 true
-    secure: process.env.NODE_ENV === 'production', // 如果您使用 HTTPS，请设置为 true
-    maxAge: 24 * 60 * 60 * 1000, // 24小时
+if (useCookieSession) {
+  // 无状态 Cookie 会话（Vercel 推荐）
+  app.use(cookieSession({
+    name: 'qsess',
+    secret: process.env.SESSION_SECRET || 'change-this-secret',
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax',
     httpOnly: true,
-    sameSite: 'lax'
-  }
-}));
+    secure: process.env.NODE_ENV === 'production'
+  }));
+  console.log('[Session] 使用 cookie-session');
+} else {
+  // 使用文件存储会话（本地/Docker）
+  app.use(session({
+    store: new FileStore({
+      path: sessionDir,
+      ttl: 86400,
+      retries: 0,
+      secret: 'html-go-secret-key',
+      logFn: function(message) {
+        console.log('[session-file-store]', message);
+      }
+    }),
+    secret: 'html-go-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === 'production',
+      maxAge: 24 * 60 * 60 * 1000,
+      httpOnly: true,
+      sameSite: 'lax'
+    }
+  }));
+  console.log('[Session] 使用文件会话存储:', sessionDir);
+}
 
 // 设置视图引擎
 app.set('views', path.join(__dirname, 'views'));
@@ -286,9 +311,9 @@ app.get('/view/:id', async (req, res) => {
 
       // 如果只有一个代码块，并且它几乎占据了整个内容，直接使用该代码块的内容和类型
       if (codeBlocks.length === 1 &&
-          codeBlocks[0].content.length > page.html_content.length * 0.7) {
-        processedContent = codeBlocks[0].content;
-        detectedType = codeBlocks[0].type;
+          codeBlocks.content.length > page.html_content.length * 0.7) {
+        processedContent = codeBlocks.content;
+        detectedType = codeBlocks.type;
         console.log(`[DEBUG] 使用单个代码块内容，类型: ${detectedType}`);
       }
       // 如果有多个代码块，创建一个HTML文档来包含所有代码块

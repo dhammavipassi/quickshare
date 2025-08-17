@@ -1,0 +1,14 @@
+# cloudflared 配置（命名隧道）
+# 作用：将 share.dhammaai.com 的请求转发到 docker 网络内的 nginx 反向代理
+
+ingress:
+  - hostname: share.dhammaai.com
+    service: http://nginx-proxy:80
+
+  # 兜底规则：其他主机名返回 404（可按需改为 503/重定向）
+  - service: http_status:404
+
+# 可选：全局 originRequest 配置（此处保持默认即可）
+# originRequest:
+#   noTLSVerify: true
+

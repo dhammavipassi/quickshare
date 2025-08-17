@@ -88,8 +88,7 @@ PORT=3003
 AUTH_ENABLED=true
 AUTH_PASSWORD=Qq112211
 DB_PATH=./db/database.sqlite
-```
-**说明**: 我们已将端口设置为 `3003`，并将您的登录密码设置为 `Qq112211`。
+```**说明**: 我们已将端口设置为 `3003`，并将您的登录密码设置为 `Qq112211`。
 
 ### 步骤 6: 修改 Docker Compose 配置
 
@@ -101,16 +100,38 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      no_cache: true
     container_name: html-go-express
     restart: unless-stopped
-    ports:
-      - "3003:3003"
     volumes:
       - html-go-data:/usr/src/app/data
     env_file:
       - .env.production
     networks:
       - html-go-network
+
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: quickshare-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - html-go-network
+    depends_on:
+      - html-go-express
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: quickshare-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token <YOUR_TUNNEL_TOKEN>
+    networks:
+      - html-go-network
+    depends_on:
+      - nginx-proxy
 
 volumes:
   html-go-data:
@@ -121,26 +142,127 @@ networks:
     driver: bridge
 ```
 
-### 步骤 7: 使用 Docker 构建并启动应用
+### 步骤 7: 配置 Nginx 反向代理
 
-现在，一切准备就绪。执行以下命令来构建并启动 Docker 容器。`--build` 参数会强制 Docker 重新构建镜像，以应用我们所有的代码和配置修复。
+我们使用官方 `nginx:alpine` 作为应用的前置代理，统一入口为 `80` 端口，反向代理到应用容器 `html-go-express:3003`。下面是项目内置的 `nginx.conf`：
+
+```nginx
+server {
+    listen 80;
+    server_name _;
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # 使用 Docker 内置 DNS，直接代理到服务名和端口
+        proxy_pass http://html-go-express:3003;
+    }
+}
+```
+
+### 步骤 8: 使用 Docker 构建并启动应用
+
+现在，一切准备就绪。执行以下命令来构建并后台启动 Docker 容器（包括应用、Nginx 代理；隧道服务可按需启用）。`--build` 会强制重新构建镜像。
 
 ```bash
 # 确保您在 quickshare 目录下
 cd /Users/dhammavipassi/Github_projects/quickshare
 
 # 构建并启动服务
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 **预期输出**:
 您会看到 Docker 构建镜像并启动容器的日志。成功后，服务将在后台运行。
 
-### 步骤 8: 访问应用
+### 步骤 9: 配置 cloudflared Ingress 规则（命名隧道必需）
 
-打开您的网络浏览器，访问：[http://localhost:3003](http://localhost:3003)
+若使用命名隧道（`cloudflared tunnel run --token ...`），需要为 `cloudflared` 提供 Ingress 规则，指明将外部流量转发到 Docker 网络内的上游服务（此项目为 Nginx 反代）。否则会出现浏览器 `HTTP 503`，并在 cloudflared 日志中看到：
 
-您应该会看到应用的登录页面。请输入密码 `Qq112211` 以登录。
+```
+WRN No ingress rules were defined in provided config (if any) nor from the cli, cloudflared will return 503 for all incoming HTTP requests
+```
+
+1) 新增配置文件 `cloudflared/config.yml`：
+
+```
+ingress:
+  - hostname: share.dhammaai.com
+    service: http://nginx-proxy:80
+
+  # 兜底规则：其他主机名返回 404
+  - service: http_status:404
+```
+
+2) 在 `docker-compose.yml` 中挂载该配置并显式指定：
+
+```yaml
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: quickshare-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token <YOUR_TUNNEL_TOKEN>
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    networks:
+      - html-go-network
+    depends_on:
+      - nginx-proxy
+```
+
+说明：
+- `hostname` 使用你的自定义域名（本例为 `share.dhammaai.com`）。
+- `service` 指向 Docker 网络中的上游 Nginx 服务（此处即 `nginx-proxy:80`）。
+- 使用命名隧道时，`--token` 由 `cloudflared tunnel token <name>` 获得；不要将令牌提交到公共仓库。
+
+3) 重启 cloudflared：
+
+```bash
+docker compose up -d --build cloudflared
+docker logs -f quickshare-cloudflared
+```
+
+看到 `Connected to ...` 且无 503 警告后，Ingress 生效。
+
+### 更安全的 Token 传递（Compose 变量插值）
+
+推荐把 token 写入项目根目录的 `.env`（默认被 .gitignore 忽略，避免入库），并在 compose 中用 `${CF_TUNNEL_TOKEN}`：
+
+1) 新建或编辑 `./.env`：
+```
+CF_TUNNEL_TOKEN=<你的 token>
+```
+
+2) 修改 `docker-compose.yml` 的 cloudflared 服务（已内置示例）：
+```yaml
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: quickshare-cloudflared
+    restart: unless-stopped
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CF_TUNNEL_TOKEN}
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    networks:
+      - html-go-network
+    depends_on:
+      - nginx-proxy
+```
+
+3) 重启 cloudflared：
+```bash
+docker compose up -d --build cloudflared
+```
+
+说明：Compose 的变量插值只读取 `.env` 或当前 shell 环境，不会使用 `env_file` 的变量；因此请将 token 放在 `./.env` 或在执行前 `export CF_TUNNEL_TOKEN=...`。
+
+### 步骤 10: 访问应用
+
+通过 Nginx 访问（推荐，同 ngrok 入口）：[http://localhost:8081](http://localhost:8081)
+
+您应该会看到应用的登录页面（如果启用认证）。
 
 ## 4. 项目功能详解
 
@@ -207,161 +329,163 @@ docker-compose up -d --build
 4. **获取链接和密码**: 页面会同时显示分享链接（如 `http://localhost:3000/v/ghijkl`）和访问密码（如 `password123`）。
 5. **分享与查看**: 将链接和密码一并发送给他人。访问者需要先输入正确的密码，才能看到渲染后的流程图。
 
-## 6. 如何与他人分享 (方案对比)
+## 6. 如何与他人分享
 
-我们为您提供了两种将本地服务分享到公网的方案，各有优劣。
+### 本地 Docker + ngrok（后台常驻）
 
-### 方案一：本地 Docker + ngrok (首推，性能与体验最佳)
+本项目内置了 `ngrok` 与 `Cloudflare Tunnel` 两种隧道容器，均支持后台常驻。通过 Compose `profiles` 可选择性启用。
 
-这个方案直接将您本地运行的 Docker 容器通过 `ngrok` 暴露到公网。
+**1) 准备 `.env.ngrok`**
 
--   **优点**:
-    -   **极速响应**: 由于应用在本地持续运行，没有“冷启动”延迟，访问速度飞快。
-    -   **数据持久化**: 所有数据都存储在您本地的 Docker volume 中，不会丢失。
-    -   **完全控制**: 您对本地环境有完全的控制权。
--   **缺点**:
-    -   需要您的电脑保持开机和联网状态。
-    -   **免费版 ngrok 的“Visit Site”提示**: 新访客首次访问时，会看到一个需要手动点击的提示页面。**这是免费套餐的安全特性，可以通过升级到 ngrok 付费版来去除**，以获得最佳的直达访问体验。
+在项目根目录创建 `.env.ngrok`（可参考 `.env.ngrok.example`）。内容如下：
 
-**操作步骤**:
-
-**1. 确保 Docker 应用正在运行**
-   ```bash
-   # 进入项目目录
-   cd /Users/dhammavipassi/Github_projects/quickshare
-   # 启动服务
-   docker-compose up -d
-   ```
-
-**2. 在后台启动 ngrok (使用 nohup)**
-
-为了确保关闭终端后 `ngrok` 服务能继续运行，我们使用 `nohup` 命令。
-
-   ```bash
-   # 进入项目目录
-   cd /Users/dhammavipassi/Github_projects/quickshare
-   
-   # 确保没有旧的 ngrok 进程在运行
-   pkill ngrok
-   
-   # 使用 nohup 在后台启动 ngrok
-   nohup ngrok start --config ngrok.yml --log=stdout quickshare-tunnel > ngrok.log 2>&1 &
-   ```
-
-**3. 获取公共链接**
-
-由于服务在后台运行，您需要通过查看日志文件 `ngrok.log` 来获取公共链接。
-
-   ```bash
-   # 查看日志并找到链接
-   cat /Users/dhammavipassi/Github_projects/quickshare/ngrok.log
-   ```
-   在日志中，找到类似 `url=https://xxxx.ngrok-free.app` 的信息，这就是您的公共分享链接。
-
-**4. 如何停止后台 ngrok 服务**
-
-当您不再需要分享时，可以运行以下命令来终止后台的 `ngrok` 进程。
-
-   ```bash
-   pkill ngrok
-   ```
-
-**1. 安装 ngrok:**
-在 macOS 上，最简单的方式是使用 Homebrew 安装。
-```bash
-brew install ngrok
+```
+NGROK_AUTHTOKEN=你的_authtoken
+# 如果你有付费预留域名，可同时设置：
+# NGROK_DOMAIN=your-reserved-subdomain.ngrok.app
 ```
 
-**2. 注册并获取 Authtoken:**
-访问 [ngrok 官网](https://dashboard.ngrok.com/signup) 注册一个免费账户，然后在您的仪表板上找到 Authtoken。执行以下命令进行配置（只需配置一次）：
-```bash
-ngrok config add-authtoken YOUR_AUTHTOKEN_HERE
-```
-将 `YOUR_AUTHTOKEN_HERE` 替换为您自己的 Authtoken。
+**2) 启动基础服务（应用 + Nginx）**
 
-**3. 启动穿透:**
-首先，确保您的 QuickShare 应用正在本地运行（例如，通过 `npm run dev` 运行在 3000 端口）。然后，打开一个新的终端窗口，运行以下命令：
 ```bash
-ngrok http 3000
+docker compose up -d --build
 ```
 
-**4. 获取分享链接:**
-`ngrok` 会生成一个公网可以访问的 URL，通常以 `https://` 开头。在终端输出中找到 `Forwarding` 这一行，将这个 URL 分享给他人即可。
+**3) 启动隧道（任选其一）**
 
-### 方案二：部署到 Vercel (备选，免费托管，有“冷启动”延迟)
+- Cloudflare（推荐、免费、无提示页）：
 
-**Vercel 部署的最终修复**:
+```bash
+npm run share:cf:up
+```
 
-我们发现，即使在代码中指定了 `/tmp` 目录，应用在 Vercel 上仍然会因为尝试创建 `db` 和 `sessions` 目录而失败。最终的解决方案是**完全移除**这些创建目录的逻辑，因为在 Serverless 环境下，我们应该假定 `/tmp` 目录永远存在且可写。
+- ngrok（免费域名可能出现提示页；预留域名可免）：
 
-请确保您的 `quickshare/models/db.js` 和 `quickshare/app.js` 文件已经包含了我们最终的修复代码。
+```bash
+npm run share:ngrok:up
+```
 
-**Vercel 部署的最终修复**:
+**4) 获取公网 URL**
 
-我们发现，即使在代码中指定了 `/tmp` 目录，应用在 Vercel 上仍然会因为尝试创建 `db` 和 `sessions` 目录而失败。最终的解决方案是**完全移除**这些创建目录的逻辑，因为在 Serverless 环境下，我们应该假定 `/tmp` 目录永远存在且可写。
+容器启动后，获取对应的公网地址：
 
-请确保您的 `quickshare/models/db.js` 和 `quickshare/app.js` 文件已经包含了我们最终的修复代码。
+```bash
+# Cloudflare 地址
+npm run cf:url
+```
 
-为了获得一个永久的、稳定的分享链接，您可以将此应用部署到云平台。考虑到您在中国大陆，需要寻找在国内可以稳定访问且提供免费套餐的服务。
+# ngrok 地址
+npm run ngrok:url
+```
 
-以下是一些值得考虑的成熟方案：
+返回的地址如 `https://xxxx.trycloudflare.com` 或 `https://xxxx.ngrok-free.app` 即为公网分享链接。
 
-- **[Zeabur](https://zeabur.com/)**:
-  - **优点**: 对国内用户非常友好，网络访问速度快。提供“开发者”免费套餐，每月有 5 美元的赠金，足够托管像 `quickshare` 这样的小型应用。支持直接从 GitHub 仓库部署，并且能自动识别 `Dockerfile`，部署流程非常顺滑。
-  - **缺点**: 免费额度有限，超出部分需要付费。
+**4) 关闭/重启**
 
-- **[Vercel](https://vercel.com/)**:
-  - **优点**: 拥有全球 CDN 网络，虽然服务器在海外，但国内访问速度尚可。其“Hobby”套餐对个人非商业项目完全免费，且额度相当慷慨。与 GitHub 集成极佳，每次代码推送都能自动触发部署。
-  - **缺点**: 偶尔在国内部分地区可能会有访问不稳定的情况。构建环境在国内可能较慢。
+```bash
+docker compose stop      # 停止但保留容器
+docker compose start     # 重新启动
+docker compose down      # 删除容器
+```
 
-- **国内云服务商的免费试用**:
-  - **阿里云 / 腾讯云**: 它们经常为新用户提供长达数月甚至一年的免费云服务器（ECS）或轻量应用服务器试用。
-  - **优点**: 服务器位于国内，访问速度极快且稳定。
-  - **缺点**: 免费期结束后需要付费。配置服务器需要一些基础的 Linux 运维知识，但由于本项目有 `Dockerfile`，您可以直接在服务器上安装 Docker 来运行，大大简化了部署难度。
+> 说明：Compose 的 `restart: unless-stopped` 会在系统重启后自动拉起容器（Docker Desktop 开机自启时）。
 
-**推荐方案**:
-对于 `quickshare` 这个项目，**Zeabur** 是一个非常理想的起点，因为它在免费、易用和国内访问速度之间取得了很好的平衡。
+## 7. 消除 ngrok “Visit Site” 提示（最终方案）
 
-### 方案实践：部署到 Vercel
+### 根因分析（为什么加 Nginx 头无效？）
 
-**重要提示：关于数据库的局限性**
+ngrok 的提示页是在 ngrok 边缘节点决定是否把请求“转发给你”的服务器之前触发的。所谓的“跳过提示页”需要浏览器在发送到 ngrok 的“首个请求”中包含自定义请求头 `ngrok-skip-browser-warning`。而我们在 Nginx 里设置的是“发往上游应用的请求头”（ngrok → Nginx → 应用），这个时机已经太晚了，ngrok 在看到该头之前就已经拦截并返回了提示页。因此，无论反向代理如何设置，都无法从服务端消除这个提示。
 
-Vercel 是一个 Serverless（无服务器）平台，其文件系统是**临时的（Ephemeral）**。这意味着每次应用部署或休眠后重启，文件系统都会被重置。
+### 可行方案
 
-`quickshare` 项目默认使用 **SQLite** 数据库，它将所有数据存储在一个文件中。因此，当部署到 Vercel 时，**您创建的所有分享链接都会在应用重启后丢失**。
+- 付费方案（推荐，最省心）：使用 ngrok 的“预留域名（Reserved Domain）/ 自定义域名”。在该场景下，提示页不再出现。
+  - 在 ngrok 控制台创建预留域名，例如 `yourname.ngrok.app`；
+  - 在 `ngrok.yml` 中取消注释 `domain:` 一行，填入你的域名；
+  - 重新执行 `docker compose up -d`。
 
-这个方案适用于**演示、测试或临时分享**。如果您需要数据的持久化存储，建议将数据库更换为云数据库（如 Vercel Postgres、MongoDB Atlas 等），但这需要对代码进行更深入的改造。
+- 免费方案（客户端侧绕过，仅适合自测）：让客户端请求带上头部 `ngrok-skip-browser-warning`（例如使用 curl 或浏览器扩展添加请求头）。此方法仅对“会设置该头的客户端”有效，不适合对外分享。
 
-**部署步骤：**
+> 结论：服务器侧（Nginx/应用）无法单方面去掉提示页；要么使用 ngrok 的预留域名，要么让客户端发送该请求头。
 
-**1. 将代码推送到 GitHub 仓库**
-   - 确保您已经将 `quickshare` 项目的所有文件（包括我们修复过的代码和新创建的 `vercel.json`）上传到了您自己的一个 GitHub 仓库中。
+## 8. 免费无提示页替代：Cloudflare Tunnel（推荐）
 
-**2. 注册并登录 Vercel**
-   - 访问 [Vercel 官网](https://vercel.com/)，使用您的 GitHub 账户进行注册和登录。
+Cloudflare 提供“Quick Tunnel”免费通道，无需账号/域名即可获得 `*.trycloudflare.com` 公网地址，默认无类似 ngrok 的提示页。我们已内置 `cloudflared` 容器，后台常驻运行；并通过 Compose `profiles` 可按需启用。
 
-**3. 导入您的项目**
-   - 登录后，在 Vercel 的仪表板（Dashboard）上，点击 “Add New...” -> “Project”。
-   - 在 “Import Git Repository” 列表中，找到并选择您刚刚上传了 `quickshare` 代码的 GitHub 仓库，然后点击 “Import”。
+**1) 启动**
 
-**4. 配置项目**
-   - Vercel 会自动检测到这是一个 Node.js 项目。您无需修改 “Build and Output Settings”。
-   - 展开 “Environment Variables”（环境变量）部分，这是最关键的一步。添加以下三个变量：
-     - **`PORT`**: `3003`
-     - **`AUTH_ENABLED`**: `true`
-     - **`AUTH_PASSWORD`**: `Qq112211`
-   - **注意**: `DB_PATH` 变量我们不需要在这里设置，因为应用会默认在临时文件系统中创建数据库文件。
+```bash
+docker compose up -d --build
+```
 
-**5. 部署**
-   - 点击 “Deploy” 按钮。
-   - Vercel 会开始拉取您的代码、安装依赖、构建并部署应用。整个过程通常需要 1-2 分钟。
+**2) 获取公网 URL**
 
-**6. 访问您的应用**
-   - 部署成功后，Vercel 会为您生成一个唯一的、以 `.vercel.app` 结尾的公共 URL。
-   - 点击这个 URL，您就可以在公网上访问您的 `quickshare` 应用了。
+- 方式 A：命令输出
+
+```bash
+npm run cf:url
+```
+
+- 方式 B：查看日志
+
+```bash
+docker logs quickshare-cloudflared --since 1h | grep trycloudflare
+```
+
+输出类似：`https://xxxx-xxxx.trycloudflare.com`。
+
+**3) 访问**
+
+- 公网：使用上一步获取的 `https://*.trycloudflare.com`
+- 本地：`http://localhost:8081`
+
+**说明与限制**
+- Quick Tunnel 随启随用、免费，但域名是临时随机的，重启后会变化；
+- 如需固定子域名，可使用 Cloudflare 免费账号 + 自有域名创建“命名隧道”（Argo Tunnel），仍为免费层使用且无提示页；
+- 与 ngrok 相比：无需客户端额外请求头，分享链接直接可用。
 
 ## 9. 注意事项
 
 - **数据库文件**: 项目使用 SQLite，数据库文件默认存储在项目根目录下的 `db/` 文件夹中。请确保该目录具有写入权限。
 - **会话文件**: 用户会话信息存储在 `sessions/` 文件夹中，同样需要写入权限。
 - **安全提示**: 如果您计划将此工具部署到公共网络，请务必将 `AUTH_ENABLED` 设置为 `true`，并使用一个足够强度的 `AUTH_PASSWORD`，以防止未经授权的访问。
+
+### 9.1 生产环境数据持久化（强烈建议）
+
+默认生产环境会将数据库写入 `/tmp/html-go.db`（为 Serverless 场景设计），容器重建可能导致数据丢失。建议改用挂载卷路径：
+
+1) 在 `.env.production` 设置：
+```
+DB_PATH=/usr/src/app/data/html-go.db
+```
+
+2) Compose 已挂载：
+```yaml
+volumes:
+  - html-go-data:/usr/src/app/data
+```
+
+3) 重建应用容器：
+```bash
+docker compose up -d --build html-go-express
+```
+
+4) 如需迁移旧数据（曾在 `/tmp/html-go.db`）：
+```bash
+# 方式 A：一键脚本（容器内执行）
+npm run db:migrate:volume
+
+# 方式 B：自定义参数
+docker compose exec html-go-express node scripts/migrate-db-to-volume.js \
+  --src=/tmp/html-go.db \
+  --dest=/usr/src/app/data/html-go.db \
+  --force
+```
+
+## 10. Vercel 托管（已支持免费持久化）
+
+- 现状：已在代码中支持根据环境切换为云端 Postgres + Cookie 会话，避免临时存储导致分享链接很快失效。
+- 配置（Vercel 环境变量）：
+  - `DATABASE_URL`：Neon/Supabase 等 Postgres 连接串
+  - `SESSION_SECRET`：随机强密钥
+  - 可选：`SESSION_STRATEGY=cookie`（手动指定 Cookie 会话；检测到 `DATABASE_URL`/`VERCEL` 时会自动启用）
+- 详情见 `VERCEL_PLAN.md`。

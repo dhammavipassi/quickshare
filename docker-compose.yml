@@ -3,16 +3,41 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      no_cache: true
     container_name: html-go-express
     restart: unless-stopped
-    ports:
-      - "3003:3003"
     volumes:
       - html-go-data:/usr/src/app/data
     env_file:
       - .env.production
     networks:
       - html-go-network
+
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: quickshare-nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - html-go-network
+    depends_on:
+      - html-go-express
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: quickshare-cloudflared
+    restart: unless-stopped
+    # 通过 Compose 变量插值传入 token（来自项目根目录 .env 文件）
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CF_TUNNEL_TOKEN}
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+    networks:
+      - html-go-network
+    depends_on:
+      - nginx-proxy
 
 volumes:
   html-go-data:

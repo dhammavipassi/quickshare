@@ -1,7 +1,10 @@
 # ngrok 配置文件 for QuickShare 项目
-authtoken: 31MayKPYAyVkbMIsD3S08drgtbu_7Q62u4ALQvs4oXEiWf8iH
+# 提示：不要在仓库中提交真实 authtoken。使用 .env.ngrok 提供。
 version: "2"
 tunnels:
   quickshare-tunnel:
     proto: http
-    addr: 3003
+    # 直接连到 docker 网络中的 Nginx 代理（使用 compose 服务名）
+    addr: nginx-proxy:80
+    # 如使用付费预留域名，可取消注释下一行并设置你的域名
+    # domain: your-reserved-subdomain.ngrok.app
