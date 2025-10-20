@@ -15,6 +15,15 @@ function isAuthenticated(req, res, next) {
   console.log('- Cookie 认证状态:', req.cookies?.auth);
   console.log('- 认证功能启用:', req.app.locals.config.authEnabled);
 
+  // API 密钥直通（用于服务器间/受信客户端，如 Obsidian 插件）
+  try {
+    const cfg = req.app.locals.config || {};
+    const key = req.get('x-api-key') || req.get('X-API-KEY') || '';
+    if (cfg.apiToken && key && key === cfg.apiToken) {
+      return next();
+    }
+  } catch (_) {}
+
   // 如果认证功能未启用，直接通过
   if (!req.app.locals.config.authEnabled) {
     console.log('- 认证功能未启用，直接通过');
