@@ -10,13 +10,15 @@ async function launchBrowser() {
     chromium = require('@sparticuz/chromium');
     puppeteer = require('puppeteer-core');
     const executablePath = await chromium.executablePath();
-    // Try to help dynamic linker find bundled libs
+    // Help dynamic linker find bundled libs (bin and ../lib)
     try {
-      const libDir = path.dirname(executablePath);
-      process.env.LD_LIBRARY_PATH = [libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
+      const binDir = path.dirname(executablePath);
+      const libDir = path.join(binDir, '..', 'lib');
+      const extra = [binDir, libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
+      process.env.LD_LIBRARY_PATH = extra;
     } catch (_) {}
     return puppeteer.launch({
-      args: chromium.args,
+      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
       defaultViewport: chromium.defaultViewport,
       executablePath,
       headless: chromium.headless,
