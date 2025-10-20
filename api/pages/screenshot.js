@@ -47,3 +47,9 @@ module.exports = async (req, res) => {
   }
 };
 
+// Per-function config (instead of vercel.json "functions" block)
+module.exports.config = {
+  memory: 1024,
+  maxDuration: 10,
+  runtime: 'nodejs18.x'
+};

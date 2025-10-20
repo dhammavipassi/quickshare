@@ -4,9 +4,6 @@
     { "src": "api/pages/screenshot.js", "use": "@vercel/node" },
     { "src": "app.js", "use": "@vercel/node" }
   ],
-  "functions": {
-    "api/pages/screenshot.js": { "memory": 1024, "maxDuration": 10 }
-  },
   "routes": [
     { "src": "^/api/pages/screenshot$", "dest": "api/pages/screenshot.js" },
     { "src": "/(.*)", "dest": "app.js" }
