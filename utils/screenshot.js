@@ -1,6 +1,8 @@
 // Serverless-friendly HTML screenshot using puppeteer-core + @sparticuz/chromium
 // Falls back to local puppeteer if available when not on Vercel
 
+const path = require('path');
+
 async function launchBrowser() {
   const isVercel = !!process.env.VERCEL || !!process.env.AWS_REGION;
   let puppeteer, chromium;
@@ -8,6 +10,11 @@ async function launchBrowser() {
     chromium = require('@sparticuz/chromium');
     puppeteer = require('puppeteer-core');
     const executablePath = await chromium.executablePath();
+    // Try to help dynamic linker find bundled libs
+    try {
+      const libDir = path.dirname(executablePath);
+      process.env.LD_LIBRARY_PATH = [libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
+    } catch (_) {}
     return puppeteer.launch({
       args: chromium.args,
       defaultViewport: chromium.defaultViewport,
@@ -59,4 +66,3 @@ async function screenshotHTML(html, opts = {}) {
 }
 
 module.exports = { screenshotHTML };
-
