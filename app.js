@@ -42,6 +42,7 @@ const config = require('./config');
 
 // 路由导入
 const pagesRoutes = require('./routes/pages');
+const { screenshotHTML } = require('./utils/screenshot');
 
 // 初始化应用
 const app = express();
@@ -220,6 +221,27 @@ app.post('/api/pages/create', isAuthenticated, async (req, res) => {
       success: false,
       error: '服务器错误'
     });
+  }
+});
+
+// HTML 截图（PNG）API：需要认证（x-api-key）
+app.post('/api/pages/screenshot', isAuthenticated, async (req, res) => {
+  try {
+    const { html, viewportWidth, viewportHeight, scale, darkMode, waitUntil } = req.body || {};
+    if (!html || typeof html !== 'string' || html.length < 10) {
+      return res.status(400).json({ success: false, error: 'html required' });
+    }
+    // 安全限制：最大视窗/比例
+    const vw = Math.min(parseInt(viewportWidth)||1024, 1920);
+    const vh = Math.min(parseInt(viewportHeight)||800, 2000);
+    const sc = Math.min(Math.max(parseFloat(scale)||1, 1), 2);
+    const buf = await screenshotHTML(html, { viewportWidth: vw, viewportHeight: vh, scale: sc, darkMode: !!darkMode, waitUntil: waitUntil || 'networkidle2' });
+    res.setHeader('Content-Type', 'image/png');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).end(buf);
+  } catch (e) {
+    console.error('截图API失败:', e);
+    return res.status(500).json({ success: false, error: 'screenshot failed', detail: String(e?.message||e) });
   }
 });
 

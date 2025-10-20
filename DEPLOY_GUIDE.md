@@ -86,7 +86,7 @@ nano .env.production
 NODE_ENV=production
 PORT=3003
 AUTH_ENABLED=true
-AUTH_PASSWORD=Qq112211
+AUTH_PASSWORD=admin123
 DB_PATH=./db/database.sqlite
 ```**说明**: 我们已将端口设置为 `3003`，并将您的登录密码设置为 `Qq112211`。
 
@@ -505,7 +505,7 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
 SESSION_SECRET=openssl-rand-base64-32-output
 # 可选
 AUTH_ENABLED=true
-AUTH_PASSWORD=YourLoginPassword
+AUTH_PASSWORD=admin123
 # 可选（通常不需要显式设置）
 # SESSION_STRATEGY=cookie
 ```

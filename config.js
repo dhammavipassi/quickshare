@@ -18,7 +18,8 @@ const config = {
     port: process.env.PORT || 5678,
     logLevel: 'dev',
     authEnabled: process.env.AUTH_ENABLED === 'true',
-    authPassword: process.env.AUTH_PASSWORD || 'admin123'
+    authPassword: process.env.AUTH_PASSWORD || 'admin123',
+    apiToken: process.env.API_TOKEN || ''
   },
 
   // 生产环境配置
@@ -26,7 +27,8 @@ const config = {
     port: parseInt(process.env.PORT, 10) || 8888,
     logLevel: 'combined',
     authEnabled: process.env.AUTH_ENABLED === 'true',
-    authPassword: process.env.AUTH_PASSWORD || 'admin123'
+    authPassword: process.env.AUTH_PASSWORD || 'admin123',
+    apiToken: process.env.API_TOKEN || ''
   },
 
   // 测试环境配置
@@ -34,7 +36,8 @@ const config = {
     port: process.env.PORT || 3000,
     logLevel: 'dev',
     authEnabled: process.env.AUTH_ENABLED === 'true',
-    authPassword: process.env.AUTH_PASSWORD || 'admin123'
+    authPassword: process.env.AUTH_PASSWORD || 'admin123',
+    apiToken: process.env.API_TOKEN || ''
   }
 };
 

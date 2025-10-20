@@ -82,7 +82,7 @@ cloudflared tunnel token quickshare    # 复制输出的 token
 NODE_ENV=production
 PORT=3003
 AUTH_ENABLED=true
-AUTH_PASSWORD=<你的密码>
+AUTH_PASSWORD=admin123
 # 可选：若你不想把 token 写进 compose，可在这里提供
 # CF_TUNNEL_TOKEN=<你的 cloudflared token>
 ```
@@ -314,7 +314,7 @@ DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
 SESSION_SECRET=<随机强密钥，例如 openssl rand -base64 32>
 # 可选认证门禁
 AUTH_ENABLED=true
-AUTH_PASSWORD=<你的登录密码>
+AUTH_PASSWORD=admin123
 # 可选：手动指定会话策略（通常不需要，自动检测）
 # SESSION_STRATEGY=cookie
 ```
