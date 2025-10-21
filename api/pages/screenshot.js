@@ -49,7 +49,7 @@ module.exports = async (req, res) => {
 
 // Per-function config (instead of vercel.json "functions" block)
 module.exports.config = {
-  memory: 1024,
-  maxDuration: 10,
-  runtime: 'nodejs18.x'
+  memory: 1536,
+  maxDuration: 20,
+  runtime: 'nodejs20.x'
 };
