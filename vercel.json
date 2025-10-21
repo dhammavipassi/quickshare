@@ -6,13 +6,10 @@
   ],
   "functions": {
     "api/pages/screenshot.js": {
-      "memory": 1024,
+      "memory": 1536,
       "maxDuration": 20,
-      "includeFiles": [
-        "node_modules/@sparticuz/chromium/**",
-        "node_modules/puppeteer-core/**",
-        "node_modules/chrome-aws-lambda/**"
-      ]
+      "runtime": "nodejs20.x",
+      "includeFiles": "node_modules/{chrome-aws-lambda,@sparticuz/chromium,puppeteer-core}/**"
     }
   },
   "routes": [
