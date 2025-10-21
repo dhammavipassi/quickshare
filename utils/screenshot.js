@@ -10,10 +10,11 @@ async function launchBrowser() {
     chromium = require('@sparticuz/chromium');
     puppeteer = require('puppeteer-core');
     const executablePath = await chromium.executablePath();
-    // Help dynamic linker find bundled libs (bin and ../lib)
+    // Help dynamic linker find bundled libs
     try {
       const binDir = path.dirname(executablePath);
-      const libDir = path.join(binDir, '..', 'lib');
+      const modDir = path.dirname(require.resolve('@sparticuz/chromium/package.json'));
+      const libDir = path.join(modDir, 'lib');
       const extra = [binDir, libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
       process.env.LD_LIBRARY_PATH = extra;
     } catch (_) {}
