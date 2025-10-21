@@ -27,6 +27,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "chrome-aws-lambda": "^10.1.0",
     "@sparticuz/chromium": "^119.0.2",
     "cookie-session": "^2.0.0",
     "body-parser": "^1.20.3",

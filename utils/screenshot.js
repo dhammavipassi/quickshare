@@ -7,23 +7,35 @@ async function launchBrowser() {
   const isVercel = !!process.env.VERCEL || !!process.env.AWS_REGION;
   let puppeteer, chromium;
   if (isVercel) {
-    chromium = require('@sparticuz/chromium');
-    puppeteer = require('puppeteer-core');
-    const executablePath = await chromium.executablePath();
-    // Help dynamic linker find bundled libs
+    // Prefer chrome-aws-lambda on AWS/Vercel; fallback to @sparticuz/chromium
     try {
-      const binDir = path.dirname(executablePath);
-      const modDir = path.dirname(require.resolve('@sparticuz/chromium/package.json'));
-      const libDir = path.join(modDir, 'lib');
-      const extra = [binDir, libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
-      process.env.LD_LIBRARY_PATH = extra;
-    } catch (_) {}
-    return puppeteer.launch({
-      args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
-      defaultViewport: chromium.defaultViewport,
-      executablePath,
-      headless: chromium.headless,
-    });
+      const awsChromium = require('chrome-aws-lambda');
+      const puppeteerCore = require('puppeteer-core');
+      const executablePath = await awsChromium.executablePath;
+      return puppeteerCore.launch({
+        args: awsChromium.args,
+        defaultViewport: awsChromium.defaultViewport,
+        executablePath,
+        headless: awsChromium.headless,
+      });
+    } catch (e) {
+      chromium = require('@sparticuz/chromium');
+      puppeteer = require('puppeteer-core');
+      const executablePath = await chromium.executablePath();
+      try {
+        const binDir = path.dirname(executablePath);
+        const modDir = path.dirname(require.resolve('@sparticuz/chromium/package.json'));
+        const libDir = path.join(modDir, 'lib');
+        const extra = [binDir, libDir, process.env.LD_LIBRARY_PATH].filter(Boolean).join(':');
+        process.env.LD_LIBRARY_PATH = extra;
+      } catch (_) {}
+      return puppeteer.launch({
+        args: [...chromium.args, '--no-sandbox', '--disable-setuid-sandbox'],
+        defaultViewport: chromium.defaultViewport,
+        executablePath,
+        headless: chromium.headless,
+      });
+    }
   } else {
     try {
       puppeteer = require('puppeteer');
